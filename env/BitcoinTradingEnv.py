@@ -30,8 +30,8 @@ class BitcoinTradingEnv(gym.Env):
         self.reward_func = reward_func
 
         self.df = df.fillna(method='bfill').reset_index()
-        self.stationary_df = log_and_difference(
-            self.df, ['Open', 'High', 'Low', 'Close', 'Volume BTC', 'Volume USD'])
+        self.df = add_indicators(self.df)                  # Why removed in original code??
+        self.stationary_df = log_and_difference(self.df, ['Open', 'High', 'Low', 'Close', 'Volume BTC', 'Volume USD'])
 
         benchmarks = kwargs.get('benchmarks', [])
         self.benchmarks = [
@@ -52,21 +52,18 @@ class BitcoinTradingEnv(gym.Env):
 
         self.forecast_len = kwargs.get('forecast_len', 10)
         self.confidence_interval = kwargs.get('confidence_interval', 0.95)
-        self.obs_shape = (1, 5 + len(self.df.columns) -
-                          2 + (self.forecast_len * 3))
+        self.obs_shape = (1, 5 + len(self.df.columns) - 2 + (self.forecast_len * 3))
 
         # Actions of the format Buy 1/4, Sell 3/4, Hold (amount ignored), etc.
         self.action_space = spaces.Discrete(12)
 
         # Observes the price action, indicators, account action, price forecasts
-        self.observation_space = spaces.Box(
-            low=0, high=1, shape=self.obs_shape, dtype=np.float16)
+        self.observation_space = spaces.Box(low=0, high=1, shape=self.obs_shape, dtype=np.float16)
 
     def _next_observation(self):
         scaler = preprocessing.MinMaxScaler()
 
-        features = self.stationary_df[self.stationary_df.columns.difference([
-            'index', 'Date'])]
+        features = self.stationary_df[self.stationary_df.columns.difference(['index', 'Date'])]
 
         scaled = features[:self.current_step + self.forecast_len + 1].values
         scaled[abs(scaled) == inf] = 0
@@ -75,18 +72,15 @@ class BitcoinTradingEnv(gym.Env):
 
         obs = scaled.values[-1]
 
-        past_df = self.stationary_df['Close'][:
-                                              self.current_step + self.forecast_len + 1]
+        past_df = self.stationary_df['Close'][:self.current_step + self.forecast_len + 1]
         forecast_model = SARIMAX(past_df.values, enforce_stationarity=False, simple_differencing=True)
         model_fit = forecast_model.fit(method='bfgs', disp=False)
-        forecast = model_fit.get_forecast(
-            steps=self.forecast_len, alpha=(1 - self.confidence_interval))
+        forecast = model_fit.get_forecast(steps=self.forecast_len, alpha=(1 - self.confidence_interval))
 
         obs = np.insert(obs, len(obs), forecast.predicted_mean, axis=0)
         obs = np.insert(obs, len(obs), forecast.conf_int().flatten(), axis=0)
 
-        scaled_history = scaler.fit_transform(
-            self.account_history.astype('float32'))
+        scaled_history = scaler.fit_transform(self.account_history.astype('float32'))
 
         obs = np.insert(obs, len(obs), scaled_history[:, -1], axis=0)
 
