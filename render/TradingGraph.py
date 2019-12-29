@@ -100,8 +100,7 @@ class TradingGraph:
 
         # Shift price axis up to give volume chart space
         ylim = self.price_ax.get_ylim()
-        self.price_ax.set_ylim(ylim[0] - (ylim[1] - ylim[0])
-                               * VOLUME_CHART_HEIGHT, ylim[1])
+        self.price_ax.set_ylim(ylim[0] - (ylim[1] - ylim[0]) * VOLUME_CHART_HEIGHT, ylim[1])
 
     def _render_volume(self, step_range, dates):
         self.volume_ax.clear()
@@ -135,7 +134,8 @@ class TradingGraph:
         initial_net_worth = round(net_worths[0], 2)
         profit_percent = round((net_worth - initial_net_worth) / initial_net_worth * 100, 2)
 
-        self.fig.suptitle('Stock: ' + self.name + ' | Net worth: $' + str(net_worth) + ' | Profit: ' + str(profit_percent) + '%')
+        self.fig.suptitle('Stock: ' + self.name.upper() + ' | Net worth: $' + str(net_worth) + ' | Profit: '
+                          + str(profit_percent) + '%')
 
         window_start = max(current_step - window_size, first_step)
         step_range = slice(window_start, current_step + 1)
@@ -145,7 +145,6 @@ class TradingGraph:
         self._render_price(step_range, dates, current_step)
         self._render_trades(step_range, trades)
         self._render_volume(step_range, dates)
-
 
         date_labels = self.df['Date'].values[step_range]
 

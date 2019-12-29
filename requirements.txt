@@ -1,11 +1,10 @@
-numpy
-pandas
+numpy==1.16.2
+pandas==0.24.2
 sklearn
 matplotlib
 gym
 stable_baselines
-optuna
-ta
+ta==0.4.3
 statsmodels==0.10.0rc2
 empyrical
-tensorflow
+tensorflow==1.13.1

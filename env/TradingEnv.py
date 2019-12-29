@@ -8,11 +8,6 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from empyrical import sortino_ratio, calmar_ratio, omega_ratio
 
 from render.TradingGraph import TradingGraph
-from util.stationarization import log_and_difference
-from util.benchmarks import buy_and_hodl, rsi_divergence, sma_crossover
-from util.indicators_y import add_indicators
-from os import listdir
-from os.path import isfile, join
 import random
 
 
@@ -47,13 +42,7 @@ class TradingEnv(gym.Env):
         self.max_steps = max_steps
         self.current_step = np.random.randint(0, len(self.df) - self.max_steps - 2)
 
-        self.account_history = np.array([
-            [self.balance],
-            [0],
-            [0],
-            [0],
-            [0]
-        ])
+        self.account_history = np.array([[self.balance], [0], [0], [0], [0]])
         self.trades = []
         self.forecast_len = kwargs.get('forecast_len', 10)
         self.confidence_interval = kwargs.get('confidence_interval', 0.95)
@@ -63,8 +52,7 @@ class TradingEnv(gym.Env):
         self.action_space = spaces.Discrete(12)
 
         # Observes the price action, indicators, account action, price forecasts
-        self.observation_space = spaces.Box(
-            low=0, high=1, shape=self.obs_shape, dtype=np.float16)
+        self.observation_space = spaces.Box(low=0, high=1, shape=self.obs_shape, dtype=np.float16)
         self.max_steps = max_steps
         self.window = 60
         self.reset()
@@ -178,13 +166,7 @@ class TradingEnv(gym.Env):
 
         self.current_step = np.random.randint(0, len(self.df) - self.max_steps - 2)
 
-        self.account_history = np.array([
-            [self.balance],
-            [0],
-            [0],
-            [0],
-            [0]
-        ])
+        self.account_history = np.array([[self.balance], [0], [0], [0], [0]])
         self.first_step = self.current_step
         self.trades = []
         if not self.viewer is None:
