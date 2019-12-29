@@ -14,7 +14,8 @@ VOLUME_CHART_HEIGHT = 0.33
 
 class TradingGraph:
 
-    def __init__(self, df):
+    def __init__(self, df, name):
+        self.name = name
         self.df = df
         self.df['Time'] = self.df['Date'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d'))
         self.df = self.df.sort_values('Time')
@@ -36,6 +37,12 @@ class TradingGraph:
 
         # Show the graph without blocking the rest of the program
         plt.show(block=False)
+
+    def update_df(self, df, name):
+        self.name = name
+        self.df = df
+        self.df['Time'] = self.df['Date'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d'))
+        self.df = self.df.sort_values('Time')
 
     def _render_net_worth(self, step_range, dates, current_step, net_worths, benchmarks, first_step):
         # Clear the frame rendered last step
@@ -128,7 +135,7 @@ class TradingGraph:
         initial_net_worth = round(net_worths[0], 2)
         profit_percent = round((net_worth - initial_net_worth) / initial_net_worth * 100, 2)
 
-        self.fig.suptitle('Net worth: $' + str(net_worth) + ' | Profit: ' + str(profit_percent) + '%')
+        self.fig.suptitle('Stock: ' + self.name + ' | Net worth: $' + str(net_worth) + ' | Profit: ' + str(profit_percent) + '%')
 
         window_start = max(current_step - window_size, first_step)
         step_range = slice(window_start, current_step + 1)

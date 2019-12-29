@@ -36,6 +36,7 @@ class TradingEnv(gym.Env):
 
         self.data = data
         curr_df = random.choice(list(self.data.keys()))
+        self.stock_name = curr_df
         self.df = self.data[curr_df][mode]['df']
         self.stationary_df = self.data[curr_df][mode]['stationary_df']
         self.benchmarks = self.data[curr_df][mode]['benchmarks']
@@ -56,7 +57,7 @@ class TradingEnv(gym.Env):
         self.trades = []
         self.forecast_len = kwargs.get('forecast_len', 10)
         self.confidence_interval = kwargs.get('confidence_interval', 0.95)
-        self.obs_shape = (1, 5 + len(self.df.columns) - 2 + (self.forecast_len * 3))
+        self.obs_shape = (1, 5 + len(self.df.columns) - 1 + (self.forecast_len * 3))
 
         # Actions of the format Buy 1/4, Sell 3/4, Hold (amount ignored), etc.
         self.action_space = spaces.Discrete(12)
@@ -71,7 +72,7 @@ class TradingEnv(gym.Env):
     def _next_observation(self):
         scaler = preprocessing.MinMaxScaler()
 
-        features = self.stationary_df[self.stationary_df.columns.difference(['index', 'Date'])]
+        features = self.stationary_df[self.stationary_df.columns.difference(['Date'])]
 
         scaled = features[:self.current_step + self.forecast_len + 1].values
         scaled[abs(scaled) == inf] = 0
@@ -88,8 +89,7 @@ class TradingEnv(gym.Env):
         obs = np.insert(obs, len(obs), forecast.predicted_mean, axis=0)
         obs = np.insert(obs, len(obs), forecast.conf_int().flatten(), axis=0)
 
-        scaled_history = scaler.fit_transform(
-            self.account_history.astype('float32'))
+        scaled_history = scaler.fit_transform(self.account_history.astype('float32'))
 
         obs = np.insert(obs, len(obs), scaled_history[:, -1], axis=0)
 
@@ -170,6 +170,7 @@ class TradingEnv(gym.Env):
         self.df = self.data[curr_df][self.mode]['df']
         self.stationary_df = self.data[curr_df][self.mode]['stationary_df']
         self.benchmarks = self.data[curr_df][self.mode]['benchmarks']
+        self.stock_name = curr_df
 
         self.balance = self.initial_balance
         self.net_worths = [self.initial_balance]
@@ -186,7 +187,8 @@ class TradingEnv(gym.Env):
         ])
         self.first_step = self.current_step
         self.trades = []
-        self.viewer = TradingGraph(self.df)
+        if not self.viewer is None:
+            self.viewer.update_df(self.df, self.stock_name)
         return self._next_observation()
 
     def step(self, action):
@@ -209,7 +211,7 @@ class TradingEnv(gym.Env):
 
         elif mode == 'human':
             if self.viewer is None:
-                self.viewer = TradingGraph(self.df)
+                self.viewer = TradingGraph(self.df, self.stock_name)
             self.viewer.render(self.current_step, self.net_worths, self.benchmarks, self.trades, self.first_step)
 
     def close(self):
