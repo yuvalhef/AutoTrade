@@ -4,10 +4,7 @@ import copy
 from pandas.api.types import is_numeric_dtype
 from tqdm import tqdm
 from datetime import datetime
-import pandas as pd
-from tslearn.piecewise import PiecewiseAggregateApproximation
-from tslearn.piecewise import SymbolicAggregateApproximation, \
-    OneD_SymbolicAggregateApproximation
+from tslearn.piecewise import SymbolicAggregateApproximation
 
 
 def normalize_data(train, test, cols):
@@ -37,6 +34,21 @@ def normalize_data(train, test, cols):
     return norm_train, norm_test
 
 
+def compute_sax(stock_dict, cols, n_paa_segments, n_sax_symbols):
+    sax = SymbolicAggregateApproximation(n_segments=n_paa_segments, alphabet_size_avg=n_sax_symbols)
+    for stock in tqdm(list(stock_dict.keys())):
+        train_stock_df = stock_dict[stock]['train']
+        test_stock_df = stock_dict[stock]['test']
+        for col in cols:
+            train_stock_df[col] = sax.inverse_transform(sax.fit_transform(train_stock_df[col]))[0]
+            test_stock_df[col] = sax.inverse_transform(sax.fit_transform(test_stock_df[col]))[0]
+
+        stock_dict[stock]['train'] = train_stock_df
+        stock_dict[stock]['test'] = test_stock_df
+
+    return stock_dict
+
+
 def main():
     # Configs:
     project_url = os.path.dirname(os.path.realpath(__file__)) + '/'
@@ -55,68 +67,33 @@ def main():
         data_with_sentiment[stock]['train'] = train_stock_df[cols]
         data_with_sentiment[stock]['test'] = test_stock_df[cols]
 
-    stocks_list = list(data_with_sentiment.keys())
-    data_with_sentiment = {k: v for k, v in data_with_sentiment.items() if k in stocks_list[0:1]}  # subset
+    # Normalize the stock prices:
+    for stock in tqdm(list(data_with_sentiment.keys())):
+        train_stock_df = data_with_sentiment[stock]['train']
+        test_stock_df = data_with_sentiment[stock]['test']
+        norm_train, norm_test = normalize_data(train=train_stock_df, test=test_stock_df,
+                                               cols=['Open', 'High', 'Low', 'Close', 'Volume'])
+        data_with_sentiment[stock]['train'] = norm_train
+        data_with_sentiment[stock]['test'] = norm_test
 
-    # # Normalize the stock prices:
-    # for stock in tqdm(list(data_with_sentiment.keys())):
-    #     train_stock_df = data_with_sentiment[stock]['train']['df']
-    #     test_stock_df = data_with_sentiment[stock]['test']['df']
-    #     cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'sentiment_1', 'sentiment_2']
-    #     train_stock_df = train_stock_df[cols]
-    #     test_stock_df = test_stock_df[cols]
-    #     norm_train, norm_test = normalize_data(train=train_stock_df, test=test_stock_df,
-    #                                            cols=['Open', 'High', 'Low', 'Close', 'Volume'])
-    #     data_with_sentiment[stock]['train'] = norm_train
-    #     data_with_sentiment[stock]['test'] = norm_test
-
-    # Sax:
+    # SAX transform:
 
     # Configs:
     min_date = datetime(2014, 1, 2).date()
     max_date = datetime(2015, 10, 19).date()
     diff_in_days = (max_date - min_date).days
     paa_average_days = 5
-    n_sax_symbols = 8
-
-    # PAA transform
-    days = int(round(diff_in_days / 7, 0)) * paa_average_days
+    n_sax_symbols = 100
+    cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+    days = int(round(452 / 7, 0)) * paa_average_days
     n_paa_segments = int(round(days / paa_average_days, 0))
-    paa = PiecewiseAggregateApproximation(n_segments=n_paa_segments)
-    for stock in tqdm(list(data_with_sentiment.keys())):
-        train_stock_df = data_with_sentiment[stock]['train']
-        test_stock_df = data_with_sentiment[stock]['test']
-        cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-        for col in cols:
-            train_stock_df[col] = paa.inverse_transform(paa.fit_transform(train_stock_df[col]))[0]
-            test_stock_df[col] = paa.inverse_transform(paa.fit_transform(test_stock_df[col]))[0]
 
-    # SAX transform:
-    sax = SymbolicAggregateApproximation(n_segments=n_paa_segments, alphabet_size_avg=n_sax_symbols)
-    for stock in tqdm(list(data_with_sentiment.keys())):
-        train_stock_df = data_with_sentiment[stock]['train']
-        test_stock_df = data_with_sentiment[stock]['test']
-        cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-        for col in cols:
-            train_stock_df[col] = sax.inverse_transform(paa.fit_transform(train_stock_df[col]))[0]
-            test_stock_df[col] = sax.inverse_transform(paa.fit_transform(test_stock_df[col]))[0]
-
-            x =3
-
-    x = 3
+    data_with_sentiment_sax = compute_sax(stock_dict=data_with_sentiment,
+                                          cols=cols,
+                                          n_paa_segments=n_paa_segments,
+                                          n_sax_symbols=n_sax_symbols)
 
 
-    # # 1d-SAX transform
-    # n_sax_symbols_avg = 8
-    # n_sax_symbols_slope = 8
-    # one_d_sax = OneD_SymbolicAggregateApproximation(
-    #     n_segments=n_paa_segments,
-    #     alphabet_size_avg=n_sax_symbols_avg,
-    #     alphabet_size_slope=n_sax_symbols_slope)
-    # transformed_data = one_d_sax.fit_transform(norm_value)
-    # one_d_sax_dataset_inv = one_d_sax.inverse_transform(transformed_data)
-
-    print('f')
 
 
 if __name__ == '__main__':
