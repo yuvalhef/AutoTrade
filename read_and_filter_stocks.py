@@ -4,7 +4,7 @@ import datetime
 from tqdm import tqdm
 from datetime import timedelta
 from collections import defaultdict
-
+import pickle
 
 def read_data(input_url):
     stocks_dict = defaultdict(list)
@@ -101,7 +101,8 @@ def main():
     project_url = os.path.dirname(os.path.realpath(__file__)) + '/'
     input_url = project_url + 'DB/Stocks'
     min_logs = 2030
-    min_date = datetime.date(2009, 10, 20)
+    min_date = datetime.date(2014, 1, 2)
+    max_date = datetime.date(2016, 4, 12)
     train_prec = 0.8
 
     # Read Data:
@@ -136,6 +137,8 @@ def main():
     print("Train date range: " + str(min_date) + ' - ' + str(end_date_of_train))
     print("Test date range: " + str(end_date_of_train) + ' - ' + str(min(stocks_stats_df['max_date'])))
     stocks_sets_dict = split_to_train_test(stocks_dict=filtered_days_min_logs_top_stocks_dict, date=end_date_of_train)
+
+    
 
 
 if __name__ == '__main__':
