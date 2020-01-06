@@ -10,10 +10,10 @@ from env.TradingEnv import TradingEnv
 
 reward_strategy = 'sortino'
 
-with open('./data/data_dict.pickle', 'rb') as handle:
+with open('./data/data_with_sentiment.pickle', 'rb') as handle:
     d = pickle.load(handle)
-
-env = TradingEnv(reward_func=reward_strategy, data=d)
+print(len(d))
+env = TradingEnv(reward_func=reward_strategy, data=d, mode='train')
 
 for i in range(100000):
     j = np.random.random_integers(12)
