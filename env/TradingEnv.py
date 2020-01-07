@@ -20,7 +20,7 @@ class TradingEnv(gym.Env):
     viewer = None
 
     def __init__(self, initial_balance=10000, commission=0.0025, reward_func='sortino',
-                 max_steps=60, data={}, mode='train', **kwargs):
+                 max_steps=120, data={}, mode='train', **kwargs):
         super(TradingEnv, self).__init__()
 
         self.kwargs = kwargs
@@ -28,19 +28,25 @@ class TradingEnv(gym.Env):
         self.initial_balance = initial_balance
         self.commission = commission
         self.reward_func = reward_func
-
-        self.data = data
-        curr_df = random.choice(list(self.data.keys()))
-        self.stock_name = curr_df
-        self.df = self.data[curr_df][mode]['df']
-        self.stationary_df = self.data[curr_df][mode]['stationary_df']
-        self.benchmarks = self.data[curr_df][mode]['benchmarks']
-
         self.balance = self.initial_balance
         self.net_worths = [self.initial_balance]
         self.btc_held = 0
         self.max_steps = max_steps
-        self.current_step = np.random.randint(0, len(self.df) - self.max_steps - 2)
+
+        self.data = data
+        if self.mode == 'train':
+            curr_df = random.choice(list(self.data.keys()))
+            self.df = self.data[curr_df][mode]['df']
+            self.current_step = np.random.randint(0, len(self.df) - self.max_steps - 2)
+        else:
+            self.stocks_names = list(self.data.keys())
+            curr_df = self.stocks_names[0]
+            self.df = self.data[curr_df][mode]['df']
+            self.current_step = 0
+
+        self.stock_name = curr_df
+        self.stationary_df = self.data[curr_df][mode]['stationary_df']
+        self.benchmarks = self.data[curr_df][mode]['benchmarks']
 
         self.account_history = np.array([[self.balance], [0], [0], [0], [0]])
         self.trades = []
@@ -120,8 +126,7 @@ class TradingEnv(gym.Env):
                                 'amount': btc_sold if btc_sold > 0 else btc_bought, 'total': sales if btc_sold > 0 else cost,
                                 'type': 'sell' if btc_sold > 0 else 'buy'})
 
-        self.net_worths.append(
-            self.balance + self.btc_held * current_price)
+        self.net_worths.append(self.balance + self.btc_held * current_price)
 
         self.account_history = np.append(self.account_history, [
             [self.balance],
@@ -132,7 +137,7 @@ class TradingEnv(gym.Env):
         ], axis=1)
 
     def _reward(self):
-        length = min(self.current_step, self.forecast_len)
+        length = min(self.current_step - self.first_step, self.forecast_len)
         returns = np.diff(self.net_worths[-length:])
 
         if np.count_nonzero(returns) < 1:
@@ -154,8 +159,16 @@ class TradingEnv(gym.Env):
                - self.forecast_len - 1
 
     def reset(self):
-        curr_df = random.choice(list(self.data.keys()))
-        self.df = self.data[curr_df][self.mode]['df']
+        if self.mode == 'train':
+            curr_df = random.choice(list(self.data.keys()))
+            self.df = self.data[curr_df][self.mode]['df']
+            self.current_step = np.random.randint(0, len(self.df) - self.max_steps - 2)
+        else:
+            curr_df = self.stocks_names[0]
+            self.stocks_names = self.stocks_names[1:]
+            self.df = self.data[curr_df][self.mode]['df']
+            self.current_step = 0
+
         self.stationary_df = self.data[curr_df][self.mode]['stationary_df']
         self.benchmarks = self.data[curr_df][self.mode]['benchmarks']
         self.stock_name = curr_df
@@ -163,8 +176,6 @@ class TradingEnv(gym.Env):
         self.balance = self.initial_balance
         self.net_worths = [self.initial_balance]
         self.btc_held = 0
-
-        self.current_step = np.random.randint(0, len(self.df) - self.max_steps - 2)
 
         self.account_history = np.array([[self.balance], [0], [0], [0], [0]])
         self.first_step = self.current_step
