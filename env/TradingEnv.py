@@ -46,6 +46,7 @@ class TradingEnv(gym.Env):
             self.df = self.data[curr_df][mode]['df']
             self.current_step = 0
 
+        self.first_step = self.current_step
         self.stock_name = curr_df
         self.stationary_df = self.data[curr_df][mode]['stationary_df']
         self.benchmarks = self.data[curr_df][mode]['benchmarks']
@@ -70,7 +71,7 @@ class TradingEnv(gym.Env):
 
         features = self.stationary_df[self.stationary_df.columns.difference(['Date'])]
 
-        scaled = features[:self.current_step + self.forecast_len + 1].values
+        scaled = features[self.first_step: self.current_step + self.forecast_len + 1].values
         scaled[abs(scaled) == inf] = 0
         scaled = scaler.fit_transform(scaled.astype('float32'))
         scaled = pd.DataFrame(scaled, columns=features.columns)
@@ -95,7 +96,7 @@ class TradingEnv(gym.Env):
         return obs
 
     def _current_price(self):
-        return self.df['Close'].values[self.current_step + self.forecast_len] + 0.01
+        return self.df['Close'].values[self.first_step + self.current_step + self.forecast_len + 1] + 0.01
 
     def _take_action(self, action):
         current_price = self._current_price()

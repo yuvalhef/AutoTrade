@@ -5,7 +5,7 @@ from stable_baselines.common.policies import MlpLnLstmPolicy
 from stable_baselines.bench import Monitor
 from stable_baselines.results_plotter import load_results, ts2xy
 from stable_baselines.common.vec_env import SubprocVecEnv, DummyVecEnv
-from stable_baselines import A2C, ACKTR, PPO2
+from stable_baselines import A2C, ACKTR, PPO2, ACER
 from env.TradingEnv import TradingEnv
 import os
 import matplotlib.pyplot as plt
@@ -21,7 +21,7 @@ def callback(_locals, _globals):
     """
     global n_steps, best_mean_reward
     # Print stats every 1000 calls
-    if (n_steps + 1) % 2 == 0:
+    if (n_steps + 1) % 10 == 0:
         # Evaluate policy training performance
         x, y = ts2xy(load_results(log_dir), 'timesteps')
         if len(x) > 0:
@@ -102,9 +102,9 @@ def test(data, render):
         if done:
             trade_env = env.envs[0]
             net_worths.append(trade_env.prev_net_worths)
-            buy_hold_res.append(trade_env.prev_benchmarks[0]['values'][:len(trade_env.prev_net_worths)])
-            rsi_res.append(trade_env.prev_benchmarks[1]['values'][:len(trade_env.prev_net_worths)])
-            sma_res.append(trade_env.prev_benchmarks[2]['values'][:len(trade_env.prev_net_worths)])
+            buy_hold_res.append(trade_env.prev_benchmarks[0]['values'][-len(trade_env.prev_net_worths):])
+            rsi_res.append(trade_env.prev_benchmarks[1]['values'][-len(trade_env.prev_net_worths):])
+            sma_res.append(trade_env.prev_benchmarks[2]['values'][-len(trade_env.prev_net_worths):])
 
             if len(trade_env.stocks_names) == 0:
                 finished = True
