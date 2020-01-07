@@ -32,6 +32,8 @@ class TradingEnv(gym.Env):
         self.net_worths = [self.initial_balance]
         self.btc_held = 0
         self.max_steps = max_steps
+        self.prev_benchmarks = None
+        self.prev_net_worths = None
 
         self.data = data
         if self.mode == 'train':
@@ -192,6 +194,10 @@ class TradingEnv(gym.Env):
         obs = self._next_observation()
         reward = self._reward()
         done = self._done()
+
+        if done:
+            self.prev_benchmarks = self.benchmarks
+            self.prev_net_worths = self.net_worths
 
         return obs, reward, done, {}
 
