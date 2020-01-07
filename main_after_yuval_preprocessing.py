@@ -113,6 +113,7 @@ def main():
     for (stock1, stock2) in tqdm(combinations):
 
         dtw_dis_list = []
+        # sax_dis_list = []
 
         for col in cols:
             s1 = np.array(data_with_sentiment_sax[stock1]['train'][col])
@@ -122,25 +123,39 @@ def main():
             dtw_distance = dtw.distance(s1, s2)
             dtw_dis_list.append(dtw_distance)
 
+            # Compute SAX distance:
+            # sax_distance = np.linalg.norm(s1 - s2)
+            # sax_dis_list.append(sax_distance)
+
         distance_dict['DTW']['stock_1'].append(stock1)
         distance_dict['DTW']['stock_2'].append(stock2)
         distance_dict['DTW']['distance_list'].append(dtw_dis_list)
-        distance_dict['DTW']['distance_average'].append(np.mean(dtw_dis_list))
+        # distance_dict['DTW']['distance_average'].append(np.mean(dtw_dis_list))
+        distance_dict['DTW']['distance_average'].append(float(0.5))
+
+        # distance_dict['SAX']['stock_1'].append(stock1)
+        # distance_dict['SAX']['stock_2'].append(stock2)
+        # distance_dict['SAX']['distance_list'].append(sax_dis_list)
+        # distance_dict['SAX']['distance_average'].append(np.mean(sax_dis_list))
 
     dtw_distances_df = pd.DataFrame(distance_dict['DTW'])
 
+    def create_distance_matrix_from_distance(stocks_list, value_col, distances_df):
+
+        dis_matrix = pd.DataFrame(None, columns=stocks_list, index=stocks_list)
+
+        return dis_matrix
+
+    dis_matrix = create_distance_matrix_from_distance(stocks_list=stocks_list,
+                                                      value_col='distance_average',
+                                                      distances_df=dtw_distances_df)
 
 
-    x = 2
-
-    # dm = np.asarray([[dist(p1, p2) for p2 in xy_list] for p1 in xy_list])
 
     # # Cluster the stocks:
     # n_clusters = 3
     # km = KMeans(n_clusters=n_clusters, init='random',max_iter=300, tol=1e-04)
     # y_km = km.fit_predict(X)
-
-    x = 3
 
 
 if __name__ == '__main__':
