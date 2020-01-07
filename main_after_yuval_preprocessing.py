@@ -10,6 +10,8 @@ from sklearn.cluster import KMeans
 # from fastdtw import fastdtw
 from dtaidistance import dtw
 from collections import defaultdict
+import itertools
+import numpy as np
 
 
 def normalize_data(train, test, cols):
@@ -51,6 +53,52 @@ def compute_sax(stock_dict, cols, n_paa_segments, n_sax_symbols):
         stock_dict[stock]['train'] = train_stock_df
 
     return sax, stock_dict
+
+
+def compute_distance(stocks_list, stocks_dict, cols, distance_metric):
+    print("\nCompute {d} distance:".format(d=str(distance_metric)))
+    distance_dict = defaultdict(list)
+    combinations = list(itertools.permutations(stocks_list, 2))
+
+    for (stock1, stock2) in tqdm(combinations):
+        distance_list = []
+        for col in cols:
+            s1 = np.array(stocks_dict[stock1]['train'][col])
+            s2 = np.array(stocks_dict[stock2]['train'][col])
+
+            # Compute DTW distance:
+            if distance_metric == 'DTW':
+                distance = dtw.distance(s1, s2)
+
+            else:
+                # Compute SAX distance:
+                distance = np.linalg.norm(s1 - s2)
+
+            distance_list.append(distance)
+
+        distance_dict['stock_1'].append(stock1)
+        distance_dict['stock_2'].append(stock2)
+        distance_dict['distance_list'].append(distance_list)
+        distance_dict['distance_average'].append(np.mean(distance_list))
+
+    distances_df = pd.DataFrame(distance_dict)
+
+    return distances_df
+
+
+def create_clusters_based_on_distance_df(stocks_list, value_col, distances_df, n_of_clusters):
+    # convert to this:
+
+    obj_distances = {
+        ('obj2', 'obj3'): 1.8,
+        ('obj3', 'obj1'): 1.95,
+        ('obj1', 'obj4'): 2.5,
+        ('obj1', 'obj2'): 2.0,
+        ('obj4', 'obj2'): 2.1,
+        ('obj3', 'obj4'): 1.58,
+    }
+
+    # return ???
 
 
 def main():
@@ -102,60 +150,19 @@ def main():
                                                n_sax_symbols=n_sax_symbols)
 
     # Compute distance matrix:
-    import itertools
-    import numpy as np
+    dtw_distances_df = compute_distance(stocks_list=list(data_with_sentiment.keys()), stocks_dict=data_with_sentiment,
+                                        cols=cols, distance_metric='DTW')
+    sax_distances_df = compute_distance(stocks_list=list(data_with_sentiment_sax.keys()),
+                                        stocks_dict=data_with_sentiment_sax, cols=cols, distance_metric='SAX')
 
-    distance_dict = defaultdict(lambda: defaultdict(list))
+    # Cluster the stocks:
+    n_of_clusters = 4
+    clusters = create_clusters_based_on_distance_df(stocks_list=stocks_list,
+                                                    value_col='distance_average',
+                                                    distances_df=sax_distances_df,
+                                                    n_of_clusters=n_of_clusters)
 
-    stocks_list = list(data_with_sentiment.keys())
-    combinations = list(itertools.permutations(stocks_list, 2))
-
-    for (stock1, stock2) in tqdm(combinations):
-
-        dtw_dis_list = []
-        # sax_dis_list = []
-
-        for col in cols:
-            s1 = np.array(data_with_sentiment_sax[stock1]['train'][col])
-            s2 = np.array(data_with_sentiment_sax[stock2]['train'][col])
-
-            # Compute DTW distance:
-            dtw_distance = dtw.distance(s1, s2)
-            dtw_dis_list.append(dtw_distance)
-
-            # Compute SAX distance:
-            # sax_distance = np.linalg.norm(s1 - s2)
-            # sax_dis_list.append(sax_distance)
-
-        distance_dict['DTW']['stock_1'].append(stock1)
-        distance_dict['DTW']['stock_2'].append(stock2)
-        distance_dict['DTW']['distance_list'].append(dtw_dis_list)
-        # distance_dict['DTW']['distance_average'].append(np.mean(dtw_dis_list))
-        distance_dict['DTW']['distance_average'].append(float(0.5))
-
-        # distance_dict['SAX']['stock_1'].append(stock1)
-        # distance_dict['SAX']['stock_2'].append(stock2)
-        # distance_dict['SAX']['distance_list'].append(sax_dis_list)
-        # distance_dict['SAX']['distance_average'].append(np.mean(sax_dis_list))
-
-    dtw_distances_df = pd.DataFrame(distance_dict['DTW'])
-
-    def create_distance_matrix_from_distance(stocks_list, value_col, distances_df):
-
-        dis_matrix = pd.DataFrame(None, columns=stocks_list, index=stocks_list)
-
-        return dis_matrix
-
-    dis_matrix = create_distance_matrix_from_distance(stocks_list=stocks_list,
-                                                      value_col='distance_average',
-                                                      distances_df=dtw_distances_df)
-
-
-
-    # # Cluster the stocks:
-    # n_clusters = 3
-    # km = KMeans(n_clusters=n_clusters, init='random',max_iter=300, tol=1e-04)
-    # y_km = km.fit_predict(X)
+    #
 
 
 if __name__ == '__main__':
