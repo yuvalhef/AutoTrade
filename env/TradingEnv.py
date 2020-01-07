@@ -34,6 +34,8 @@ class TradingEnv(gym.Env):
         self.max_steps = max_steps
         self.prev_benchmarks = None
         self.prev_net_worths = None
+        self.forecast_len = kwargs.get('forecast_len', 10)
+
 
         self.data = data
         if self.mode == 'train':
@@ -53,7 +55,6 @@ class TradingEnv(gym.Env):
 
         self.account_history = np.array([[self.balance], [0], [0], [0], [0]])
         self.trades = []
-        self.forecast_len = kwargs.get('forecast_len', 10)
         self.confidence_interval = kwargs.get('confidence_interval', 0.95)
         self.obs_shape = (1, 5 + len(self.df.columns) - 1 + (self.forecast_len * 3))
 
@@ -96,7 +97,7 @@ class TradingEnv(gym.Env):
         return obs
 
     def _current_price(self):
-        return self.df['Close'].values[self.first_step + self.current_step + self.forecast_len] + 0.01
+        return self.df['Close'].values[self.current_step + self.forecast_len + 1] + 0.01
 
     def _take_action(self, action):
         current_price = self._current_price()
@@ -165,7 +166,7 @@ class TradingEnv(gym.Env):
         if self.mode == 'train':
             curr_df = random.choice(list(self.data.keys()))
             self.df = self.data[curr_df][self.mode]['df']
-            self.current_step = np.random.randint(0, len(self.df) - self.max_steps - 2)
+            self.current_step = np.random.randint(0, len(self.df) - self.max_steps - self.forecast_len - 2)
         else:
             curr_df = self.stocks_names[0]
             self.stocks_names = self.stocks_names[1:]
