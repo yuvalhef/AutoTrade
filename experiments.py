@@ -74,7 +74,8 @@ def train(data):
     agent_params['env'] = env
 
     model = PPO2(**agent_params)
-    model.learn(total_timesteps=100000, callback=callback)
+    model.learn(total_timesteps=3000, callback=callback)
+    model.save(log_dir+'last_model.pkl')
 
 
 def test(data, render):
@@ -84,8 +85,8 @@ def test(data, render):
     env = DummyVecEnv([lambda: env])
     agent_params['env'] = env
 
-    model = PPO2.load(log_dir+'/best_model.pkl', env=env)
-    print('Loaded best model')
+    model = PPO2.load(log_dir+'/last_model.pkl', env=env)
+    print('Loaded last model')
 
     rsi_res = []
     sma_res = []
