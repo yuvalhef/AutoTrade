@@ -7,6 +7,6 @@ stable_baselines
 ta==0.4.3
 statsmodels==0.10.0rc2
 empyrical
-tensorflow==1.13.1
+tensorflow
 tslearn
 dtaidistance

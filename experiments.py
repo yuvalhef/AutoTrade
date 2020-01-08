@@ -5,7 +5,7 @@ from stable_baselines.common.policies import MlpLnLstmPolicy
 from stable_baselines.bench import Monitor
 from stable_baselines.results_plotter import load_results, ts2xy
 from stable_baselines.common.vec_env import SubprocVecEnv, DummyVecEnv
-from stable_baselines import A2C, ACKTR, PPO2
+from stable_baselines import A2C, ACKTR, PPO2, ACER
 from env.TradingEnv import TradingEnv
 import os
 import matplotlib.pyplot as plt
@@ -74,7 +74,8 @@ def train(data):
     agent_params['env'] = env
 
     model = PPO2(**agent_params)
-    model.learn(total_timesteps=100000, callback=callback)
+    model.learn(total_timesteps=3000, callback=callback)
+    model.save(log_dir+'last_model.pkl')
 
 
 def test(data, render):
@@ -84,8 +85,8 @@ def test(data, render):
     env = DummyVecEnv([lambda: env])
     agent_params['env'] = env
 
-    model = PPO2.load(log_dir+'/best_model.pkl', env=env)
-    print('Loaded best model')
+    model = PPO2.load(log_dir+'/last_model.pkl', env=env)
+    print('Loaded last model')
 
     rsi_res = []
     sma_res = []
@@ -102,9 +103,9 @@ def test(data, render):
         if done:
             trade_env = env.envs[0]
             net_worths.append(trade_env.prev_net_worths)
-            buy_hold_res.append(trade_env.prev_benchmarks[0]['values'][:len(trade_env.prev_net_worths)])
-            rsi_res.append(trade_env.prev_benchmarks[1]['values'][:len(trade_env.prev_net_worths)])
-            sma_res.append(trade_env.prev_benchmarks[2]['values'][:len(trade_env.prev_net_worths)])
+            buy_hold_res.append(trade_env.prev_benchmarks[0]['values'][-len(trade_env.prev_net_worths):])
+            rsi_res.append(trade_env.prev_benchmarks[1]['values'][-len(trade_env.prev_net_worths):])
+            sma_res.append(trade_env.prev_benchmarks[2]['values'][-len(trade_env.prev_net_worths):])
 
             if len(trade_env.stocks_names) == 0:
                 finished = True
