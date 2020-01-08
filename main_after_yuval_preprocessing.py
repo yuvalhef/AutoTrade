@@ -3,16 +3,21 @@ import pickle
 import copy
 from pandas.api.types import is_numeric_dtype
 from tqdm import tqdm
-from datetime import datetime
 import pandas as pd
 from tslearn.piecewise import SymbolicAggregateApproximation
-from sklearn.cluster import KMeans
-# from fastdtw import fastdtw
 from dtaidistance import dtw
 from collections import defaultdict
 import itertools
 import numpy as np
-
+from datetime import datetime, timedelta
+from scipy.cluster.hierarchy import linkage
+import matplotlib.pyplot as plt
+from scipy.cluster import hierarchy
+from scipy.spatial.distance import squareform
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import DBSCAN
+from scipy.cluster.hierarchy import dendrogram, linkage
+import scipy.spatial.distance as ssd
 
 def normalize_data(train, test, cols):
     norm_train = copy.deepcopy(train)
@@ -55,50 +60,75 @@ def compute_sax(stock_dict, cols, n_paa_segments, n_sax_symbols):
     return sax, stock_dict
 
 
-def compute_distance(stocks_list, stocks_dict, cols, distance_metric):
-    print("\nCompute {d} distance:".format(d=str(distance_metric)))
-    distance_dict = defaultdict(list)
+def compute_distance_matrix(stocks_list, stocks_dict, cols, distance_metric):
+    print("\nCompute {d} distance matrix:".format(d=str(distance_metric)))
+    distance_dict = defaultdict(lambda: defaultdict(float))
     combinations = list(itertools.permutations(stocks_list, 2))
+
+    # Remove duplicate combinations:
+    no_duplicate_combinations = []
+    for (stock1, stock2) in combinations:
+        if ((stock1, stock2) in no_duplicate_combinations) or ((stock2, stock1) in no_duplicate_combinations):
+            continue
+        else:
+            no_duplicate_combinations.append((stock1, stock2))
 
     for (stock1, stock2) in tqdm(combinations):
         distance_list = []
         for col in cols:
             s1 = np.array(stocks_dict[stock1]['train'][col])
             s2 = np.array(stocks_dict[stock2]['train'][col])
-
             # Compute DTW distance:
             if distance_metric == 'DTW':
                 distance = dtw.distance(s1, s2)
-
             else:
                 # Compute SAX distance:
                 distance = np.linalg.norm(s1 - s2)
-
             distance_list.append(distance)
+        distance_dict[stock1][stock2] = np.mean(distance_list)
 
-        distance_dict['stock_1'].append(stock1)
-        distance_dict['stock_2'].append(stock2)
-        distance_dict['distance_list'].append(distance_list)
-        distance_dict['distance_average'].append(np.mean(distance_list))
+    # Create distance matrix:
+    distance_matrix_dict = defaultdict(lambda: defaultdict(float))
+    for stock1 in stocks_list:
+        for stock2 in stocks_list:
+            if stock1 == stock2:
+                value = 0
+            else:
+                if stock1 in list(distance_dict.keys()):
+                    value = distance_dict[stock1][stock2]
+                else:
+                    value = distance_dict[stock2][stock1]
+            distance_matrix_dict[stock1][stock2] = value
+    distance_matrix = pd.DataFrame.from_dict(distance_matrix_dict, orient='index')
 
-    distances_df = pd.DataFrame(distance_dict)
-
-    return distances_df
+    return distance_matrix
 
 
-def create_clusters_based_on_distance_df(stocks_list, value_col, distances_df, n_of_clusters):
-    # convert to this:
+def create_clusters_from_distance_matrix(distance_matrix, n_of_clusters):
 
-    obj_distances = {
-        ('obj2', 'obj3'): 1.8,
-        ('obj3', 'obj1'): 1.95,
-        ('obj1', 'obj4'): 2.5,
-        ('obj1', 'obj2'): 2.0,
-        ('obj4', 'obj2'): 2.1,
-        ('obj3', 'obj4'): 1.58,
-    }
+    stocks = list(distance_matrix.columns)
 
-    # return ???
+    dist_array = ssd.squareform(distance_matrix)
+    Z = linkage(dist_array)
+    fig = plt.figure(figsize=(25, 10))
+    dn = dendrogram(Z, labels=stocks)
+    plt.show()
+
+    cluster = DBSCAN(eps=3, min_samples=1).fit_predict(distance_matrix)
+
+    labels = cluster.labels_
+
+    print("c")
+
+    distance_matrix['cluser'] = labels
+
+    return distance_matrix
+
+
+def datetime_range(start=None, end=None):
+    span = end - start
+    for i in range(span.days + 1):
+        yield start + timedelta(days=i)
 
 
 def main():
@@ -112,7 +142,8 @@ def main():
     file.close()
 
     stocks_list = list(data_with_sentiment.keys())
-    data_with_sentiment = {k: v for k, v in data_with_sentiment.items() if k in stocks_list[0:5]}  # subset
+    data_with_sentiment = {k: v for k, v in data_with_sentiment.items() if k in stocks_list[0:3]}  # subset
+    stocks_list = list(data_with_sentiment.keys())
 
     # Clean data:
     for stock in list(data_with_sentiment.keys()):
@@ -133,7 +164,6 @@ def main():
         data_with_sentiment[stock]['test'] = norm_test
 
     # SAX transform:
-
     # Configs:
     min_date = datetime(2014, 1, 2).date()
     max_date = datetime(2015, 10, 19).date()
@@ -150,19 +180,32 @@ def main():
                                                n_sax_symbols=n_sax_symbols)
 
     # Compute distance matrix:
-    dtw_distances_df = compute_distance(stocks_list=list(data_with_sentiment.keys()), stocks_dict=data_with_sentiment,
-                                        cols=cols, distance_metric='DTW')
-    sax_distances_df = compute_distance(stocks_list=list(data_with_sentiment_sax.keys()),
-                                        stocks_dict=data_with_sentiment_sax, cols=cols, distance_metric='SAX')
+    dtw_distance_matrix = compute_distance_matrix(stocks_list=list(data_with_sentiment.keys()),
+                                                  stocks_dict=data_with_sentiment,
+                                                  cols=cols, distance_metric='DTW')
+    sax_distance_matrix = compute_distance_matrix(stocks_list=list(data_with_sentiment_sax.keys()),
+                                                  stocks_dict=data_with_sentiment_sax, cols=cols, distance_metric='SAX')
 
-    # Cluster the stocks:
-    n_of_clusters = 4
-    clusters = create_clusters_based_on_distance_df(stocks_list=stocks_list,
-                                                    value_col='distance_average',
-                                                    distances_df=sax_distances_df,
+    # # Cluster the stocks:
+    n_of_clusters = 2
+    clusters = create_clusters_from_distance_matrix(distance_matrix=sax_distance_matrix,
                                                     n_of_clusters=n_of_clusters)
 
-    #
+    # Create features based on clusters:
+    # cluster_list = list(set(clusters['cluser']))
+    cluster_list = [1, 2, 1, 2]
+
+    list_of_dates = list(datetime_range(start=min_date, end=max_date))
+
+    for cluster in tqdm(cluster_list):
+
+        cluster_df = pd.DataFrame(list_of_dates, columns=['Date'])
+        mean_sentiment = []
+
+        for date in cluster_df['Date']:
+            print('d')
+
+    print("d")
 
 
 if __name__ == '__main__':
