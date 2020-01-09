@@ -6,7 +6,7 @@ from tqdm import tqdm
 import pandas as pd
 from tslearn.piecewise import SymbolicAggregateApproximation
 from dtaidistance import dtw
-from collections import defaultdict
+from collections import defaultdict, Counter
 import itertools
 import numpy as np
 from datetime import datetime, timedelta
@@ -14,6 +14,12 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 import scipy.spatial.distance as ssd
+
+
+def save_pickle_object(obj, obj_name, url):
+    file = open(url + obj_name + '.obj', 'wb')
+    pickle.dump(obj, file)
+    print('Info: saved {o} pickle file.'.format(o=str(obj_name)))
 
 
 def concat_dfs_by_row(list_of_dfs):
@@ -149,6 +155,7 @@ def cluster_distance_matrix(distance_matrix, cluster_method, cluster_params):
     clusters_num = len(list(set(labels)))
     print("\nNumber of clusters with method {m}: {n}".format(m=str(cluster_method), n=str(clusters_num)))
     distance_matrix['cluster'] = labels
+    print("\nDistribution of stocks per clusters: \n" + str(Counter(distance_matrix['cluster'])))
 
     distance_matrix = distance_matrix.reset_index()
     distance_matrix.rename(columns={'index': 'stock'}, inplace=True)
@@ -162,19 +169,16 @@ def datetime_range(start=None, end=None):
         yield start + timedelta(days=i)
 
 
-def create_features_based_clusters(stocks_with_clusters, list_of_dates, stocks_dict, data_set_type):
-    cluster_list = list(set(stocks_with_clusters['cluster']))
-    cluster_df = pd.DataFrame(columns=['cluster', 'Date', 'yesterday_mean_sentiment_1', 'yesterday_mean_sentiment_2',
-                                       'yesterday_mean_close_price'])
+def create_features_based_clusters(stocks_per_clusters, list_of_dates, stocks_dict, data_set_type):
+    cluster_list = list(set(stocks_per_clusters['cluster']))
+    cluster_df = pd.DataFrame(columns=['cluster', 'Date', 'cluster@yesterday_mean_close_price'])
 
     for cluster in tqdm(cluster_list):
 
-        list_of_stocks_per_cluster = list(stocks_with_clusters[stocks_with_clusters['cluster'] == cluster]['stock'])
+        list_of_stocks_per_cluster = list(stocks_per_clusters[stocks_per_clusters['cluster'] == cluster]['stock'])
 
         for date in list_of_dates:
 
-            sentiment_1_list = []
-            sentiment_2_list = []
             stock_prices_list = []
 
             day_before = date - timedelta(days=1)
@@ -185,11 +189,6 @@ def create_features_based_clusters(stocks_with_clusters, list_of_dates, stocks_d
                 train_stock_df = train_stock_df[train_stock_df['Date'] < pd.Timestamp(date)]
 
                 if train_stock_df.shape[0] > 0:
-                    if train_stock_df['sentiment_1'].values[0] != -99:
-                        sentiment_1_list.append(train_stock_df['sentiment_1'].values[0])
-                    if train_stock_df['sentiment_2'].values[0] != -99:
-                        sentiment_2_list.append(train_stock_df['sentiment_2'].values[0])
-
                     stock_prices_list.append(train_stock_df['Close'].values[0])
 
                 # # Create feature with time:
@@ -201,25 +200,13 @@ def create_features_based_clusters(stocks_with_clusters, list_of_dates, stocks_d
                 if train_stock_df.shape[0] > 0:
                     stock_prices_list.append(train_stock_df['Close'].values[0])
 
-            if len(sentiment_1_list) > 0:
-                mean_sentiment_1 = np.mean(sentiment_1_list)
-            else:
-                mean_sentiment_1 = np.nan
-
-            if len(sentiment_2_list) > 0:
-                mean_sentiment_2 = np.mean(sentiment_2_list)
-            else:
-                mean_sentiment_2 = np.nan
-
             if len(stock_prices_list) > 0:
                 mean_price = np.mean(stock_prices_list)
             else:
                 mean_price = np.nan
 
             # Append values in cluster df:
-            new_row = pd.Series({'cluster': cluster, 'Date': date, 'yesterday_mean_sentiment_1': mean_sentiment_1,
-                                 'yesterday_mean_sentiment_2': mean_sentiment_2,
-                                 'yesterday_mean_close_price': mean_price})
+            new_row = pd.Series({'cluster': cluster, 'Date': date, 'yesterday_mean_close_price': mean_price})
             cluster_df = cluster_df.append(new_row, ignore_index=True)
 
     # Remove nans:
@@ -275,7 +262,7 @@ def main():
     for stock in list(data_with_sentiment.keys()):
         train_stock_df = data_with_sentiment[stock]['train']['df']
         test_stock_df = data_with_sentiment[stock]['test']['df']
-        cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'sentiment_1', 'sentiment_2']
+        cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
 
         # Convert 'Date' to date:
         train_stock_df['Date'] = pd.to_datetime(train_stock_df['Date'])
@@ -288,7 +275,7 @@ def main():
         data_with_sentiment_not_normalized[stock]['test'] = test_stock_df[cols]
 
     # Normalize the stock prices:
-    print("\nNormalize:")
+    print("\nNormalizing the data:")
     for stock in tqdm(list(data_with_sentiment.keys())):
         train_stock_df = data_with_sentiment[stock]['train']
         test_stock_df = data_with_sentiment[stock]['test']
@@ -322,31 +309,53 @@ def main():
     else:
         cluster_params = DBSCAN_params
 
-    stocks_with_clusters = cluster_distance_matrix(distance_matrix=distance_matrix,
-                                                   cluster_method=cluster_method,
-                                                   cluster_params=cluster_params)
+    stocks_per_clusters = cluster_distance_matrix(distance_matrix=distance_matrix,
+                                                  cluster_method=cluster_method,
+                                                  cluster_params=cluster_params)
 
     # Create features based on clusters:
     print("\nCreate features per clusters:")
     list_of_dates = list(datetime_range(start=train_start_date, end=train_end_date))
-    train_cluster_df = create_features_based_clusters(stocks_with_clusters=stocks_with_clusters,
+    train_cluster_df = create_features_based_clusters(stocks_per_clusters=stocks_per_clusters,
                                                       list_of_dates=list_of_dates,
                                                       stocks_dict=data_with_sentiment_not_normalized,
                                                       data_set_type='train')
 
     list_of_dates = list(datetime_range(start=test_start_date, end=test_end_date))
-    test_cluster_df = create_features_based_clusters(stocks_with_clusters=stocks_with_clusters,
+    test_cluster_df = create_features_based_clusters(stocks_per_clusters=stocks_per_clusters,
                                                      list_of_dates=list_of_dates,
                                                      stocks_dict=data_with_sentiment_not_normalized,
                                                      data_set_type='test')
 
-    cluster_df = concat_dfs_by_row(list_of_dfs=[train_cluster_df, test_cluster_df])
+    clusters_df = concat_dfs_by_row(list_of_dfs=[train_cluster_df, test_cluster_df])
+    clusters_df["Date"] = pd.to_datetime(clusters_df['Date'])
 
     # Check if there is duplicates dates between train and test:
-    no_duplicates_cluster_df = cluster_df.drop_duplicates(subset=['Date', 'cluster'])
-    assert cluster_df.shape[0] == no_duplicates_cluster_df.shape[0]
+    no_duplicates_clusters_df = clusters_df.drop_duplicates(subset=['Date', 'cluster'])
+    assert clusters_df.shape[0] == no_duplicates_clusters_df.shape[0]
 
-    x = 3
+    # Add cluster feature per stock:
+    print('\nAdd cluster features to stocks dict:')
+    preprocessed_stocks_dict = copy.deepcopy(data_with_sentiment_not_normalized)
+    for stock in tqdm(list(preprocessed_stocks_dict.keys())):
+        train_stock_df = preprocessed_stocks_dict[stock]['train']
+        test_stock_df = preprocessed_stocks_dict[stock]['test']
+
+        # Extract relevant cluster df:
+        cluster = stocks_per_clusters[stocks_per_clusters['stock'] == stock]['cluster'].values[0]
+        cluster_df = clusters_df[clusters_df['cluster'] == cluster]
+
+        # Add cluster features:
+        train_stock_df_with_cluster_features = pd.merge(train_stock_df, cluster_df, how='left', on='Date')
+        test_stock_df_with_cluster_features = pd.merge(test_stock_df, cluster_df, how='left', on='Date')
+
+        preprocessed_stocks_dict[stock]['train'] = train_stock_df_with_cluster_features
+        preprocessed_stocks_dict[stock]['test'] = test_stock_df_with_cluster_features
+
+    # Save pickle objects:
+    save_pickle_object(obj=clusters_df, obj_name='clusters_df', url=input_url)
+    save_pickle_object(obj=stocks_per_clusters, obj_name='stocks_per_clusters', url=input_url)
+    save_pickle_object(obj=preprocessed_stocks_dict, obj_name='preprocessed_stocks_dict', url=input_url)
 
 
 if __name__ == '__main__':
