@@ -16,6 +16,24 @@ from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 import scipy.spatial.distance as ssd
 
 
+def concat_dfs_by_row(list_of_dfs):
+    new_list_Of_dfs = []
+
+    if len(list_of_dfs) < 2:
+        print('Error: less than two DFs.')
+        return None
+
+    col_shape = list_of_dfs[0].shape[1]
+    for df in list_of_dfs:
+        assert df.shape[1] == col_shape
+        df.reset_index(drop=True, inplace=True)
+        new_list_Of_dfs.append(df)
+
+    all_df = pd.concat(new_list_Of_dfs, axis=0, ignore_index=True)
+
+    return all_df
+
+
 def normalize_data(train, test, cols):
     norm_train = copy.deepcopy(train)
     norm_test = copy.deepcopy(test)
@@ -99,11 +117,11 @@ def compute_distance_matrix(stocks_list, stocks_dict, cols, distance_metric):
             else:
                 if stock1 in list(distance_dict.keys()):
                     value = distance_dict[stock1][stock2]
-                    value = (value - min) / (max-min)
+                    value = (value - min) / (max - min)
 
                 else:
                     value = distance_dict[stock2][stock1]
-                    value = (value - min) / (max-min)
+                    value = (value - min) / (max - min)
 
             distance_matrix_dict[stock1][stock2] = value
     distance_matrix = pd.DataFrame.from_dict(distance_matrix_dict, orient='index')
@@ -132,7 +150,10 @@ def cluster_distance_matrix(distance_matrix, cluster_method, cluster_params):
     print("\nNumber of clusters with method {m}: {n}".format(m=str(cluster_method), n=str(clusters_num)))
     distance_matrix['cluster'] = labels
 
-    return distance_matrix
+    distance_matrix = distance_matrix.reset_index()
+    distance_matrix.rename(columns={'index': 'stock'}, inplace=True)
+
+    return distance_matrix[['stock', 'cluster']]
 
 
 def datetime_range(start=None, end=None):
@@ -141,16 +162,86 @@ def datetime_range(start=None, end=None):
         yield start + timedelta(days=i)
 
 
+def create_features_based_clusters(stocks_with_clusters, list_of_dates, stocks_dict, data_set_type):
+    cluster_list = list(set(stocks_with_clusters['cluster']))
+    cluster_df = pd.DataFrame(columns=['cluster', 'Date', 'yesterday_mean_sentiment_1', 'yesterday_mean_sentiment_2',
+                                       'yesterday_mean_close_price'])
+
+    for cluster in tqdm(cluster_list):
+
+        list_of_stocks_per_cluster = list(stocks_with_clusters[stocks_with_clusters['cluster'] == cluster]['stock'])
+
+        for date in list_of_dates:
+
+            sentiment_1_list = []
+            sentiment_2_list = []
+            stock_prices_list = []
+
+            day_before = date - timedelta(days=1)
+
+            for stock in list_of_stocks_per_cluster:
+                train_stock_df = stocks_dict[stock][data_set_type]
+                train_stock_df = train_stock_df[train_stock_df['Date'] >= pd.Timestamp(day_before)]
+                train_stock_df = train_stock_df[train_stock_df['Date'] < pd.Timestamp(date)]
+
+                if train_stock_df.shape[0] > 0:
+                    if train_stock_df['sentiment_1'].values[0] != -99:
+                        sentiment_1_list.append(train_stock_df['sentiment_1'].values[0])
+                    if train_stock_df['sentiment_2'].values[0] != -99:
+                        sentiment_2_list.append(train_stock_df['sentiment_2'].values[0])
+
+                    stock_prices_list.append(train_stock_df['Close'].values[0])
+
+                # # Create feature with time:
+                # two_days_before = day_before - timedelta(days=1)
+                # train_stock_df = data_with_sentiment_not_normalized[stock][data_set_type]
+                # train_stock_df = train_stock_df[train_stock_df['Date'] >= pd.Timestamp(two_days_before)]
+                # train_stock_df = train_stock_df[train_stock_df['Date'] <= pd.Timestamp(day_before)]
+
+                if train_stock_df.shape[0] > 0:
+                    stock_prices_list.append(train_stock_df['Close'].values[0])
+
+            if len(sentiment_1_list) > 0:
+                mean_sentiment_1 = np.mean(sentiment_1_list)
+            else:
+                mean_sentiment_1 = np.nan
+
+            if len(sentiment_2_list) > 0:
+                mean_sentiment_2 = np.mean(sentiment_2_list)
+            else:
+                mean_sentiment_2 = np.nan
+
+            if len(stock_prices_list) > 0:
+                mean_price = np.mean(stock_prices_list)
+            else:
+                mean_price = np.nan
+
+            # Append values in cluster df:
+            new_row = pd.Series({'cluster': cluster, 'Date': date, 'yesterday_mean_sentiment_1': mean_sentiment_1,
+                                 'yesterday_mean_sentiment_2': mean_sentiment_2,
+                                 'yesterday_mean_close_price': mean_price})
+            cluster_df = cluster_df.append(new_row, ignore_index=True)
+
+    # Remove nans:
+    cols = list(cluster_df.columns)
+    cols.remove('cluster')
+    cols.remove('Date')
+    no_nan_cluster_df = cluster_df.dropna(subset=cols)
+
+    return no_nan_cluster_df
+
+
 def main():
     # Configs:
-    global cols
     project_url = os.path.dirname(os.path.realpath(__file__)) + '/'
     input_url = project_url + 'data/'
 
     # Sax:
     preform_sax = True
-    min_date = datetime(2014, 1, 2).date()
-    max_date = datetime(2015, 10, 19).date()
+    train_start_date = datetime(2014, 1, 2, 00, 00, 00, 00).date()
+    train_end_date = datetime(2015, 10, 20, 00, 00, 00, 00).date()
+    test_start_date = datetime(2015, 10, 19, 00, 00, 00, 00).date()
+    test_end_date = datetime(2016, 11, 5, 00, 00, 00, 00).date()
     paa_average_days = 5
     n_sax_symbols = 10  # 5, 10
 
@@ -180,12 +271,21 @@ def main():
     data_with_sentiment = {k: v for k, v in data_with_sentiment.items() if k in stocks_list[0:10]}  # subset
 
     # Clean data:
+    data_with_sentiment_not_normalized = defaultdict(lambda: defaultdict(list))
     for stock in list(data_with_sentiment.keys()):
         train_stock_df = data_with_sentiment[stock]['train']['df']
         test_stock_df = data_with_sentiment[stock]['test']['df']
         cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'sentiment_1', 'sentiment_2']
+
+        # Convert 'Date' to date:
+        train_stock_df['Date'] = pd.to_datetime(train_stock_df['Date'])
+        test_stock_df['Date'] = pd.to_datetime(test_stock_df['Date'])
+
         data_with_sentiment[stock]['train'] = train_stock_df[cols]
         data_with_sentiment[stock]['test'] = test_stock_df[cols]
+
+        data_with_sentiment_not_normalized[stock]['train'] = train_stock_df[cols]
+        data_with_sentiment_not_normalized[stock]['test'] = test_stock_df[cols]
 
     # Normalize the stock prices:
     print("\nNormalize:")
@@ -199,7 +299,6 @@ def main():
 
     # Compute distance matrix:
     if preform_sax:
-        diff_in_days = (max_date - min_date).days
         cols = ['Open', 'High', 'Low', 'Close', 'Volume']
         days = int(round(452 / 7, 0)) * paa_average_days
         n_paa_segments = int(round(days / paa_average_days, 0))
@@ -223,23 +322,31 @@ def main():
     else:
         cluster_params = DBSCAN_params
 
-    distance_matrix_with_clusters = cluster_distance_matrix(distance_matrix=distance_matrix,
-                                                            cluster_method=cluster_method,
-                                                            cluster_params=cluster_params)
+    stocks_with_clusters = cluster_distance_matrix(distance_matrix=distance_matrix,
+                                                   cluster_method=cluster_method,
+                                                   cluster_params=cluster_params)
 
     # Create features based on clusters:
-    # # cluster_list = list(set(clusters['cluster']))
-    # list_of_dates = list(datetime_range(start=min_date, end=max_date))
-    #
-    # for cluster in tqdm(cluster_list):
-    #
-    #     cluster_df = pd.DataFrame(list_of_dates, columns=['Date'])
-    #     mean_sentiment = []
-    #
-    #     for date in cluster_df['Date']:
-    #         print('d')
+    print("\nCreate features per clusters:")
+    list_of_dates = list(datetime_range(start=train_start_date, end=train_end_date))
+    train_cluster_df = create_features_based_clusters(stocks_with_clusters=stocks_with_clusters,
+                                                      list_of_dates=list_of_dates,
+                                                      stocks_dict=data_with_sentiment_not_normalized,
+                                                      data_set_type='train')
 
-    print("d")
+    list_of_dates = list(datetime_range(start=test_start_date, end=test_end_date))
+    test_cluster_df = create_features_based_clusters(stocks_with_clusters=stocks_with_clusters,
+                                                     list_of_dates=list_of_dates,
+                                                     stocks_dict=data_with_sentiment_not_normalized,
+                                                     data_set_type='test')
+
+    cluster_df = concat_dfs_by_row(list_of_dfs=[train_cluster_df, test_cluster_df])
+
+    # Check if there is duplicates dates between train and test:
+    no_duplicates_cluster_df = cluster_df.drop_duplicates(subset=['Date', 'cluster'])
+    assert cluster_df.shape[0] == no_duplicates_cluster_df.shape[0]
+
+    x = 3
 
 
 if __name__ == '__main__':
