@@ -318,7 +318,7 @@ def main():
     file.close()
 
     stocks_list = list(data_with_sentiment.keys())
-    data_with_sentiment = {k: v for k, v in data_with_sentiment.items() if k in stocks_list[0:10]}  # subset
+    # data_with_sentiment = {k: v for k, v in data_with_sentiment.items() if k in stocks_list[0:10]}  # subset
 
     # Clean data:
     data_with_sentiment_not_normalized = defaultdict(lambda: defaultdict(list))
