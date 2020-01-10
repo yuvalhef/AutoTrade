@@ -318,7 +318,7 @@ def main():
     file.close()
 
     stocks_list = list(data_with_sentiment.keys())
-    # data_with_sentiment = {k: v for k, v in data_with_sentiment.items() if k in stocks_list[0:10]}  # subset
+    data_with_sentiment = {k: v for k, v in data_with_sentiment.items() if k in stocks_list[0:10]}  # subset
 
     # Clean data:
     data_with_sentiment_not_normalized = defaultdict(lambda: defaultdict(list))
@@ -394,10 +394,6 @@ def main():
 
     clusters_df = concat_dfs_by_row(list_of_dfs=[train_cluster_df, test_cluster_df])
     clusters_df["Date"] = pd.to_datetime(clusters_df['Date'])
-
-    # Check if there is duplicates dates between train and test:
-    no_duplicates_clusters_df = clusters_df.drop_duplicates(subset=['Date', 'cluster'])
-    assert clusters_df.shape[0] == no_duplicates_clusters_df.shape[0]
 
     # Add cluster feature per stock:
     print('\nAdd cluster features to stocks dict:')
