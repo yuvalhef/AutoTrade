@@ -156,5 +156,7 @@ class TradingGraph:
         # Necessary to view frames before they are unrendered
         plt.pause(0.0001)
 
+        return plt
+
     def close(self):
         plt.close()

@@ -213,7 +213,7 @@ class TradingEnv(gym.Env):
         elif mode == 'human':
             if self.viewer is None:
                 self.viewer = TradingGraph(self.df, self.stock_name)
-            self.viewer.render(self.current_step, self.net_worths, self.benchmarks, self.trades, self.first_step)
+            self.viewer.render(self.current_step, self.net_worths, self.benchmarks, self.trades, self.first_step, window_size=self.max_steps)
 
     def close(self):
         if self.viewer is not None:

@@ -15,15 +15,15 @@ def preprocess(df, initial_balance=10000, commission=0.0025):
     benchmarks = [
         {
             'label': 'Buy and HODL',
-            'values': buy_and_hodl(df['Close'], initial_balance, commission)
+            'values': buy_and_hodl(df['Close'][10:], initial_balance, commission)
         },
         {
             'label': 'RSI Divergence',
-            'values': rsi_divergence(df['Close'], initial_balance, commission)
+            'values': rsi_divergence(df['Close'][10:], initial_balance, commission)
         },
         {
             'label': 'SMA Crossover',
-            'values': sma_crossover(df['Close'], initial_balance, commission)
+            'values': sma_crossover(df['Close'][10:], initial_balance, commission)
         },
     ]
     return {'df': df, 'stationary_df': stationary_df, 'benchmarks': benchmarks}
